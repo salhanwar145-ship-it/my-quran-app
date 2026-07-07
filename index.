@@ -1,0 +1,138 @@
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() => runApp(const QuranApp());
+
+class QuranApp extends StatelessWidget {
+  const QuranApp({super.key});
+  @override
+  Widget build(BuildContext context) => const MaterialApp(home: SurahListScreen());
+}
+
+// ١. شاشەی لیستی سورەتەکان
+class SurahListScreen extends StatelessWidget {
+  const SurahListScreen({super.key});
+
+  final List<Map<String, String>> surahs = const [
+    {"name": "فاتحە", "text": "بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ"},
+    {"name": "ئیخلاص", "text": "قُلْ هُوَ اللَّهُ أَحَدٌ اللَّهُ الصَّمَدُ لَمْ يَلِدْ وَلَمْ يُولَدْ"},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("لیستی سورەتەکان")),
+      body: ListView.builder(
+        itemCount: surahs.length,
+        itemBuilder: (context, index) {
+          return ListTile(
+            title: Text(surahs[index]["name"]!),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => QuranScreen(text: surahs[index]["text"]!, title: surahs[index]["name"]!)),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ٢. شاشەی خوێندنەوە (ئەو بەشەی پێشتر دروستمان کرد)
+class QuranScreen extends StatefulWidget {
+  final String text;
+  final String title;
+  const QuranScreen({super.key, required this.text, required this.title});
+  @override
+  State<QuranScreen> createState() => _QuranScreenState();
+}
+
+class _QuranScreenState extends State<QuranScreen> {
+  double fontSize = 24.0;
+  Map<String, String> notes = {};
+  late SharedPreferences prefs;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPrefs();
+  }
+
+  Future<void> _initPrefs() async {
+    prefs = await SharedPreferences.getInstance();
+    setState(() {
+      final keys = prefs.getKeys();
+      for (var key in keys) {
+        if (key.startsWith("note_")) notes[key] = prefs.getString(key)!;
+      }
+    });
+  }
+
+  Future<void> _addNote(String key, String word) async {
+    TextEditingController controller = TextEditingController(text: notes[key] ?? "");
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("تێبینی بۆ: $word"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: controller, autofocus: true),
+            TextButton(onPressed: () {
+              prefs.remove(key);
+              setState(() => notes.remove(key));
+              Navigator.pop(context);
+            }, child: const Text("سڕینەوەی تێبینی", style: TextStyle(color: Colors.red)))
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () async {
+            setState(() => notes[key] = controller.text);
+            await prefs.setString(key, controller.text);
+            Navigator.pop(context);
+          }, child: const Text("پاشەکەوت"))
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(icon: const Icon(Icons.text_increase), onPressed: () => setState(() => fontSize++)),
+          IconButton(icon: const Icon(Icons.text_decrease), onPressed: () => setState(() => fontSize--)),
+        ],
+      ),
+      body: InteractiveViewer(
+        minScale: 1.0, maxScale: 4.0,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Wrap(
+            children: widget.text.split(' ').asMap().entries.map((entry) {
+              int idx = entry.key;
+              String word = entry.value;
+              String uniqueKey = "note_${widget.title}_${idx}_$word"; 
+
+              return GestureDetector(
+                onLongPress: () => _addNote(uniqueKey, word),
+                child: Container(
+                  margin: const EdgeInsets.all(2),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: notes.containsKey(uniqueKey) ? Colors.teal.withOpacity(0.3) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(word, style: TextStyle(fontSize: fontSize)),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+}
